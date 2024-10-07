@@ -1,0 +1,123 @@
+---
+title: "PCA"
+output:
+  data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABIAAAASCAYAAABWzo5XAAAAWElEQVR42mNgGPTAxsZmJsVqQApgmGw1yApwKcQiT7phRBuCzzCSDSHGMKINIeDNmWQlA2IigKJwIssQkHdINgxfmBBtGDEBS3KCxBc7pMQgMYE5c/AXPwAwSX4lV3pTWwAAAABJRU5ErkJggg==
+  word_document: default
+  html_document: default
+date: '2023-02-27'
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+
+```{r cargar las librerías}
+library(factoextra)
+library(psy)
+library(corrplot)
+library(ggplot2)
+library(reshape2)
+library(readxl)
+library(dplyr)
+
+```
+```{r cargar los datos}
+datos=read_excel("C:/Users/elian/Downloads/Tesis backup/Codes/Outputs/df_scaled.xlsx")
+attach(datos)
+head(datos)
+#row.names(datos) <- datos[,c(1)]
+
+```
+
+```{r matriz de correlaciones}
+# Especificar las columnas que no son continuas
+columnas_no_continuas <- c("Centre","DFS","DFSCensor","Dcd","ID","LRC","LRCCensor","LocalisationORL","OS","P16","Tabac","chimio", "sex",	"stadeN",	"stadeT","stade", "Age", "dst_MTVweightedMaxDistTN", "dst_MTVweightedSumDistNBarycenterN", "dst_MTVweightedSumDistTN", "dst_TBarycenterN", "dst_maxDistTN", "dst_sumDistTN", "int_HUMean_3abs", "int_HUMean_42rel",  "int_SUVMax", "int_SUVMax_T",  "volT", "int_SUVMean_T_0abs","dst_sumDistNBarycenterN")
+#dst_sumDistNBarycenter
+# Seleccionar las columnas continuas
+datos_continuos <- datos[, !(names(datos) %in% columnas_no_continuas)]
+```
+
+```{r matriz de correlaciones}
+"La matriz de correlaciones"
+corr_matrix <- cor(datos_continuos)
+#corr_matrix
+
+# Filtrar las columnas con correlación >= 0.8
+# Encontrar índices de las características con correlaciones altas (>= 0.8)
+high_corr_indices <- apply(corr_matrix, 2, function(x) any(x >= 0.8 & x != 1))
+
+# Seleccionar las columnas que tienen correlaciones altas
+datos_altas_corr <- datos_continuos[, high_corr_indices]
+
+# Ver las características seleccionadas
+#print(names(datos_altas_corr))
+
+# Guardar la matriz de correlación
+write.csv(corr_matrix, file="corr_matrix_suv_feats.csv")
+
+
+#corrplot(corr_matrix, method = "number")
+#corrplot.mixed(corr_matrix, lower="number", upper="ellipse")
+#corrplot.mixed(corr_matrix, lower="number", upper="circle")
+#write.csv(corr_matrix, file="corr_matrix.csv", row.names=TRUE)
+
+```
+
+```{r PCA}
+"Cálculo del PCA usando solo las variables con alta correlación"
+res.pca_altas_corr = prcomp(datos_altas_corr, scale = FALSE) # si no quiero estandarizar scale = FALSE
+#res.pca_altas_corr
+
+"Mostrar las tablas"
+get_pca_var(res.pca_altas_corr)
+get_eig(res.pca_altas_corr) # tabla de eigenvalores varianza acumulada
+
+"Mostrar las gráficas"
+fviz_eig(res.pca_altas_corr)
+fviz_screeplot(res.pca_altas_corr, addlabels = FALSE, ylim = c(0, 100)) # screeplot
+fviz_pca_ind(res.pca_altas_corr, repel = FALSE, cex = 0.5) # gráfico individuos y PCA
+fviz_pca_biplot(res.pca_altas_corr) # biplot
+biplot(x = res.pca_altas_corr, scale = 0.5, cex = 0.8, col = c("blue4", "brown3"))
+fviz_pca_var(res.pca_altas_corr, col.var = "black") # gráfico de pesos de los componentes
+fviz_pca_var(res.pca_altas_corr, col.var="contrib", gradient.cols = c("#00AFBB", "#E7B800", "#FC4E07"), repel = TRUE) # gráfico de pesos de los componentes a color
+
+"Guardar los componentes PCA en un archivo CSV"
+pred_altas_corr <- predict(res.pca_altas_corr)
+write.csv(pred_altas_corr, file="componentes_altas_corr.csv", sep=';', row.names=FALSE)
+
+"Mostrar las contribuciones de las variables originales a cada componente"
+contribuciones <- get_pca_var(res.pca_altas_corr)$contrib
+print(contribuciones)
+write.csv(contribuciones, file="contribuciones_PCA.csv", sep=';', row.names=TRUE)
+
+```
+
+
+```{r Dataset}
+#Selecciono los primeros 5 componentes
+pca_components <- res.pca_altas_corr$x[, 1:5]
+
+#Extraigo las características no correlacionadas
+non_corr_features <- datos_continuos[, !high_corr_indices]
+
+#Re-extraigo las columnas no continuas del dataset
+non_continuous_vars <- datos[, columnas_no_continuas]
+
+#Combino todo en un nuevo dataframe
+final_dataset <- cbind(non_continuous_vars, non_corr_features, pca_components)
+
+
+# Step 7: Save or view the final dataset
+write.csv(final_dataset, file="df_pca.csv", row.names = FALSE)
+
+
+
+```
